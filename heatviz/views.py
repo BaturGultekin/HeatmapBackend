@@ -2010,7 +2010,7 @@ def extract_clustering_params_from_filters(filters):
     Extract zscore_axis, dist_type, and linkage_type from filters.
     Returns tuple: (zscore_axis, dist_type, linkage_type)
     """
-    zscore_axis = 'col'  # Default
+    zscore_axis = 'row'  # Default — keep refresh consistent with initial render
     dist_type = 'euclidean'  # Default
     linkage_type = 'average'  # Default
 

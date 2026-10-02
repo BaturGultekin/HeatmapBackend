@@ -21870,3 +21870,308 @@ INFO 2025-08-27 18:40:23,685 views 9275 12993982464 3D coordinate generation dis
 INFO 2025-08-27 19:04:46,874 views 9275 12993982464 3D coordinate generation disabled for session: 770223fc-e9c4-4d98-bde3-73253dc4e825
 INFO 2025-08-28 14:39:32,590 views 9275 12993982464 3D coordinate generation disabled for session: a56a6484-17c1-4aa4-9fa1-1120159e402d
 INFO 2025-09-01 18:11:14,823 views 89452 12960428032 3D coordinate generation disabled for session: 399a3884-a93c-48da-ba27-bea323dda93c
+INFO 2026-04-14 03:23:09,849 views 1312135 140560386525312 Session f9e48adc-0155-42b4-8339-b9deb9776110 cleaned up. Files deleted: ['f9e48adc-0155-42b4-8339-b9deb9776110.tsv', 'f9e48adc-0155-42b4-8339-b9deb9776110_metadata.json']
+WARNING 2026-05-31 22:52:33,427 views 3896313 139937148278912 Could not detect matrix start column, defaulting to 0
+WARNING 2026-05-31 22:52:33,428 views 3896313 139937148278912 Some values couldn't be converted to float, cleaning data...
+INFO 2026-05-31 22:52:34,587 views 3896313 139937148278912 Missing values detected: 12.78%
+ERROR 2026-06-07 03:30:18,646 views 1539010 139693828454528 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0c9622ee20>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-07-18 22:13:58,230 log 3359970 139693828454528 Internal Server Error: /backend/index.wsgi/api/heatmapdata/command/
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 1432, in command_execution
+    filters = current_state.get('filters', {})
+AttributeError: 'str' object has no attribute 'get'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/decorators/csrf.py", line 56, in wrapper_view
+    return view_func(*args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/generic/base.py", line 104, in view
+    return self.dispatch(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 509, in dispatch
+    response = self.handle_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 469, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 480, in raise_uncaught_exception
+    raise exc
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 506, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/decorators.py", line 50, in handler
+    return func(*args, **kwargs)
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 2003, in command_execution
+    error_trace = traceback.format_exc()
+UnboundLocalError: local variable 'traceback' referenced before assignment
+ERROR 2026-07-18 22:14:10,219 log 3360265 139693828454528 Internal Server Error: /backend/index.wsgi/api/heatmapdata/command/
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/parsers.py", line 66, in parse
+    return json.load(decoded_stream, parse_constant=parse_constant)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/utils/json.py", line 31, in load
+    return json.load(*args, **kwargs)
+  File "/usr/lib64/python3.9/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+  File "/usr/lib64/python3.9/json/__init__.py", line 359, in loads
+    return cls(**kw).decode(s)
+  File "/usr/lib64/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/usr/lib64/python3.9/json/decoder.py", line 353, in raw_decode
+    obj, end = self.scan_once(s, idx)
+json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 1429, in command_execution
+    session_id = request.data.get('session_id')
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/request.py", line 220, in data
+    self._load_data_and_files()
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/request.py", line 283, in _load_data_and_files
+    self._data, self._files = self._parse()
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/request.py", line 358, in _parse
+    parsed = parser.parse(stream, media_type, self.parser_context)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/parsers.py", line 68, in parse
+    raise ParseError('JSON parse error - %s' % str(exc))
+rest_framework.exceptions.ParseError: JSON parse error - Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/decorators/csrf.py", line 56, in wrapper_view
+    return view_func(*args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/generic/base.py", line 104, in view
+    return self.dispatch(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 509, in dispatch
+    response = self.handle_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 469, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 480, in raise_uncaught_exception
+    raise exc
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 506, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/decorators.py", line 50, in handler
+    return func(*args, **kwargs)
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 2003, in command_execution
+    error_trace = traceback.format_exc()
+UnboundLocalError: local variable 'traceback' referenced before assignment
+INFO 2026-07-18 22:14:18,030 views 3360420 139693828454528 Session 63d81488-5328-45ca-b5fb-c3e815a42ec2 cleaned up. Files deleted: ['63d81488-5328-45ca-b5fb-c3e815a42ec2.tsv', '63d81488-5328-45ca-b5fb-c3e815a42ec2_metadata.json']
+ERROR 2026-07-18 22:16:18,597 log 3362133 139693828454528 Internal Server Error: /backend/index.wsgi/api/heatmapdata/command/
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 1651, in command_execution
+    "commandHistory": command_history + [command]
+TypeError: can only concatenate str (not "list") to str
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/decorators/csrf.py", line 56, in wrapper_view
+    return view_func(*args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/generic/base.py", line 104, in view
+    return self.dispatch(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 509, in dispatch
+    response = self.handle_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 469, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 480, in raise_uncaught_exception
+    raise exc
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 506, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/decorators.py", line 50, in handler
+    return func(*args, **kwargs)
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 2003, in command_execution
+    error_trace = traceback.format_exc()
+UnboundLocalError: local variable 'traceback' referenced before assignment
+ERROR 2026-07-18 22:17:27,565 log 3363117 139693828454528 Internal Server Error: /backend/index.wsgi/api/heatmapdata/command/
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 1670, in command_execution
+    "commandHistory": command_history + [command]
+TypeError: can only concatenate str (not "list") to str
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/decorators/csrf.py", line 56, in wrapper_view
+    return view_func(*args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/generic/base.py", line 104, in view
+    return self.dispatch(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 509, in dispatch
+    response = self.handle_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 469, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 480, in raise_uncaught_exception
+    raise exc
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 506, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/decorators.py", line 50, in handler
+    return func(*args, **kwargs)
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 2003, in command_execution
+    error_trace = traceback.format_exc()
+UnboundLocalError: local variable 'traceback' referenced before assignment
+ERROR 2026-07-18 22:20:36,734 log 3365778 139693828454528 Internal Server Error: /backend/index.wsgi/api/heatmapdata/command/
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 1670, in command_execution
+    "commandHistory": command_history + [command]
+TypeError: can only concatenate str (not "list") to str
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/decorators/csrf.py", line 56, in wrapper_view
+    return view_func(*args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/generic/base.py", line 104, in view
+    return self.dispatch(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 509, in dispatch
+    response = self.handle_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 469, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 480, in raise_uncaught_exception
+    raise exc
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 506, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/decorators.py", line 50, in handler
+    return func(*args, **kwargs)
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 2003, in command_execution
+    error_trace = traceback.format_exc()
+UnboundLocalError: local variable 'traceback' referenced before assignment
+ERROR 2026-07-18 22:20:38,250 log 3365807 139693828454528 Internal Server Error: /backend/index.wsgi/api/heatmapdata/command/
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 1670, in command_execution
+    "commandHistory": command_history + [command]
+TypeError: can only concatenate str (not "list") to str
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/decorators/csrf.py", line 56, in wrapper_view
+    return view_func(*args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/django/views/generic/base.py", line 104, in view
+    return self.dispatch(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 509, in dispatch
+    response = self.handle_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 469, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 480, in raise_uncaught_exception
+    raise exc
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/views.py", line 506, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/hpc/users/rawalo01/heatmapBackendVirtual/lib/python3.9/site-packages/rest_framework/decorators.py", line 50, in handler
+    return func(*args, **kwargs)
+  File "/hpc/users/rawalo01/www/clusterchirp/backend/heatviz/views.py", line 2003, in command_execution
+    error_trace = traceback.format_exc()
+UnboundLocalError: local variable 'traceback' referenced before assignment
+ERROR 2026-07-23 11:17:08,402 views 1121212 139693828454528 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0c96234e20>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-08-03 17:57:38,735 views 653139 139693828454528 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f0c96239e20>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 19:42:53,559 views 2095565 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a7fdf0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 19:43:07,802 views 2095679 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a7adf0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 19:43:19,528 views 2095774 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a78df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 19:43:33,127 views 2095953 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a81df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 19:55:50,503 views 2102849 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a7fdf0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 19:56:03,320 views 2102965 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a81df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 19:56:26,464 views 2103109 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a8bdf0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 19:57:16,837 views 2103588 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a88df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 20:06:16,578 views 2108112 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a83df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 20:06:16,578 views 2108153 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a81df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-23 20:16:04,714 views 2113252 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a7fdf0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-24 01:08:12,677 log 2351322 140509276354688 Bad Gateway: /backend/index.wsgi/api/heatmapdata/enrich/
+ERROR 2026-09-24 16:59:59,342 views 2763764 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a7fdf0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-24 17:39:20,523 views 2775595 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca6ea96df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-24 17:40:14,561 views 2776245 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a80df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-24 17:41:18,912 views 2776505 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a79df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-24 17:42:00,002 views 2776696 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a87df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-24 17:44:36,524 views 2777226 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a74df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-24 17:45:10,645 views 2777395 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a80df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-24 18:58:53,945 views 2795810 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a80df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-25 17:29:15,993 views 3527773 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a7fdf0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-25 17:37:52,922 views 3531996 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a84df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-09-25 17:43:33,131 views 3534394 140509276354688 Error with ChatGPT request: HTTPSConnectionPool(host='api.openai.com', port=443): Max retries exceeded with url: /v1/chat/completions (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fca72a85df0>: Failed to establish a new connection: [Errno -2] Name or service not known'))
+ERROR 2026-10-02 14:53:57,949 log 67391 123145598681088 Service Unavailable: /api/heatmapdata/command/
+ERROR 2026-10-02 14:53:57,951 basehttp 67391 123145598681088 "POST /api/heatmapdata/command/ HTTP/1.1" 503 119
+ERROR 2026-10-02 14:58:04,527 log 67460 123145448140800 Service Unavailable: /api/heatmapdata/command/
+ERROR 2026-10-02 14:58:04,528 basehttp 67460 123145448140800 "POST /api/heatmapdata/command/ HTTP/1.1" 503 119
+ERROR 2026-10-02 14:58:39,869 log 67460 123145448140800 Service Unavailable: /api/heatmapdata/command/
+ERROR 2026-10-02 14:58:39,886 basehttp 67460 123145448140800 "POST /api/heatmapdata/command/ HTTP/1.1" 503 119
+INFO 2026-10-02 15:22:25,937 views 67691 123145499758592 🔍 USER COMMAND: 'Filter Category to five'
+INFO 2026-10-02 15:22:25,957 views 67691 123145499758592 🔍 GPT RAW RESPONSE: {'action': 'sample_filter', 'target': 'Category', 'value': 'five'}
+INFO 2026-10-02 15:22:25,963 views 67691 123145499758592 🔍 PARSED: action='sample_filter', target='Category', value='five'
+ERROR 2026-10-02 15:23:05,358 views 67691 123145499758592 Error processing file: File is not a zip file
+Traceback (most recent call last):
+  File "/Users/baturgultekin/development/projects/HeatmapBackend/heatviz/views.py", line 871, in read_uploaded_file
+    df = pd.read_csv(file_path, sep=',', header=None)
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/parsers/readers.py", line 912, in read_csv
+    return _read(filepath_or_buffer, kwds)
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/parsers/readers.py", line 583, in _read
+    return parser.read(nrows)
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/parsers/readers.py", line 1704, in read
+    ) = self._engine.read(  # type: ignore[attr-defined]
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/parsers/c_parser_wrapper.py", line 234, in read
+    chunks = self._reader.read_low_memory(nrows)
+  File "pandas/_libs/parsers.pyx", line 814, in pandas._libs.parsers.TextReader.read_low_memory
+  File "pandas/_libs/parsers.pyx", line 875, in pandas._libs.parsers.TextReader._read_rows
+  File "pandas/_libs/parsers.pyx", line 850, in pandas._libs.parsers.TextReader._tokenize_rows
+  File "pandas/_libs/parsers.pyx", line 861, in pandas._libs.parsers.TextReader._check_tokenize_status
+  File "pandas/_libs/parsers.pyx", line 2029, in pandas._libs.parsers.raise_parser_error
+pandas.errors.ParserError: Error tokenizing data. C error: Expected 1 fields in line 4, saw 2
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/baturgultekin/development/projects/HeatmapBackend/heatviz/views.py", line 972, in process_data_view
+    df = read_uploaded_file(file_path, original_filename)
+  File "/Users/baturgultekin/development/projects/HeatmapBackend/heatviz/views.py", line 874, in read_uploaded_file
+    df = pd.read_excel(file_path, header=None, dtype=str, engine='openpyxl')
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/excel/_base.py", line 478, in read_excel
+    io = ExcelFile(io, storage_options=storage_options, engine=engine)
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/excel/_base.py", line 1513, in __init__
+    self._reader = self._engines[engine](self._io, storage_options=storage_options)
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/excel/_openpyxl.py", line 549, in __init__
+    super().__init__(filepath_or_buffer, storage_options=storage_options)
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/excel/_base.py", line 540, in __init__
+    self.book = self.load_workbook(self.handles.handle)
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/pandas/io/excel/_openpyxl.py", line 560, in load_workbook
+    return load_workbook(
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/openpyxl/reader/excel.py", line 346, in load_workbook
+    reader = ExcelReader(filename, read_only, keep_vba,
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/openpyxl/reader/excel.py", line 123, in __init__
+    self.archive = _validate_archive(fn)
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/site-packages/openpyxl/reader/excel.py", line 95, in _validate_archive
+    archive = ZipFile(filename, 'r')
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/zipfile.py", line 1272, in __init__
+    self._RealGetContents()
+  File "/Users/baturgultekin/anaconda3/envs/clusterchirp-deploy/lib/python3.10/zipfile.py", line 1339, in _RealGetContents
+    raise BadZipFile("File is not a zip file")
+zipfile.BadZipFile: File is not a zip file
+
+ERROR 2026-10-02 15:23:05,374 log 67691 123145499758592 Internal Server Error: /api/heatmapdata/process/
+ERROR 2026-10-02 15:23:05,375 basehttp 67691 123145499758592 "POST /api/heatmapdata/process/ HTTP/1.1" 500 1052
+INFO 2026-10-02 15:24:03,342 views 67691 123145499758592 🔍 USER COMMAND: 'Filter Sex to Female'
+INFO 2026-10-02 15:24:03,342 views 67691 123145499758592 🔍 GPT RAW RESPONSE: {'action': 'sample_filter', 'target': 'Sex', 'value': 'Female'}
+INFO 2026-10-02 15:24:03,342 views 67691 123145499758592 🔍 PARSED: action='sample_filter', target='Sex', value='Female'
+INFO 2026-10-02 15:24:45,042 views 67691 123145499758592 🔍 USER COMMAND: 'Filter Sex to Male'
+INFO 2026-10-02 15:24:45,042 views 67691 123145499758592 🔍 GPT RAW RESPONSE: {'action': 'sample_filter', 'target': 'Sex', 'value': 'Male'}
+INFO 2026-10-02 15:24:45,042 views 67691 123145499758592 🔍 PARSED: action='sample_filter', target='Sex', value='Male'
+INFO 2026-10-02 15:36:33,858 views 69998 123145556389888 🔍 USER COMMAND: 'Filter Sex to Male'
+INFO 2026-10-02 15:36:33,858 views 69998 123145556389888 🔍 GPT RAW RESPONSE: {'action': 'sample_filter', 'target': 'Sex', 'value': 'Male'}
+INFO 2026-10-02 15:36:33,858 views 69998 123145556389888 🔍 PARSED: action='sample_filter', target='Sex', value='Male'

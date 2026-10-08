@@ -1030,7 +1030,93 @@ def process_data_view(request):
             "error_type": type(e).__name__,
             "traceback": error_trace
         }, status=500)
-    
+
+@api_view(['POST'])
+def create_demo_session(request):
+    """
+    Create an isolated backend session for the homepage example heatmap.
+
+    The homepage visualization is already loaded in the frontend, so this
+    endpoint only prepares the session-backed TSV and metadata needed by
+    AI commands, clustering, filtering, networks, and enrichment.
+    """
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+        # Canonical dataset corresponding to the homepage example heatmap
+        demo_source = os.path.join(
+            os.path.dirname(__file__),
+            'sample_data',
+            'heatmap.tsv'
+        )
+
+        if not os.path.exists(demo_source):
+            return JsonResponse({
+                "error": "Homepage example dataset not found.",
+                "file_path": demo_source
+            }, status=404)
+
+        # Every homepage visitor gets an independent session
+        session_id = str(uuid.uuid4())
+
+        session_file_path = os.path.join(
+            UPLOAD_DIR,
+            f"{session_id}.tsv"
+        )
+
+        metadata_file_path = os.path.join(
+            UPLOAD_DIR,
+            f"{session_id}_metadata.json"
+        )
+
+        # Copy canonical example data into this user's temporary session
+        with open(demo_source, 'rb') as source:
+            with open(session_file_path, 'wb') as destination:
+                while True:
+                    chunk = source.read(1024 * 1024)
+
+                    if not chunk:
+                        break
+
+                    destination.write(chunk)
+
+        # Read using the same parser used for uploaded datasets
+        df = read_uploaded_file(
+            session_file_path,
+            'heatmap.tsv'
+        )
+
+        # Generate the same metadata file required by command_execution()
+        extract_and_save_metadata(
+            df=df,
+            metadata_json_path=metadata_file_path
+        )
+
+        # Keep the same status convention as normal uploads
+        task_status_cache[session_id] = {
+            'status': 'disabled',
+            'message': '3D layout generation disabled.'
+        }
+
+        return JsonResponse({
+            "success": True,
+            "session_id": session_id,
+            "global_3d_positions_status": "disabled"
+        }, status=200)
+
+    except Exception as e:
+        error_trace = traceback.format_exc()
+
+        logger.error(
+            f"Error creating homepage demo session: {str(e)}\n{error_trace}"
+        )
+
+        return JsonResponse({
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "traceback": error_trace
+        }, status=500)
+       
 @api_view(['GET'])
 def get_3d_coords_view(request, session_id: str):
     """
@@ -1420,6 +1506,32 @@ def validate_command_values(action, target, value, df, metadata=None, filters=No
     # If we get here, validation passed
     return True, None
 
+def resolve_zscore_axis(transformation, fallback_axis='row'):
+    """
+    Resolve whether the current matrix should be re-z-scored.
+
+    New frontend:
+      reZscore=False -> 'None'
+      reZscore=True, axis='row' -> 'row'
+      reZscore=True, axis='col' -> 'col'
+
+    Older callers without transformation keep the existing behavior.
+    """
+    if not transformation:
+        return fallback_axis
+
+    re_zscore = transformation.get('reZscore', False)
+
+    if not re_zscore:
+        return 'None'
+
+    requested_axis = transformation.get('axis', 'row')
+
+    if requested_axis not in ('row', 'col'):
+        requested_axis = 'row'
+
+    return requested_axis
+
 # Replace the section after "Extract data from response" with this:
 @api_view(['POST'])
 def command_execution(request):
@@ -1431,6 +1543,7 @@ def command_execution(request):
         current_state = request.data.get('current_state', {})
         filters = current_state.get('filters', {})
         command_history = current_state.get('commandHistory', [])
+        transformation = current_state.get('transformation', {})
 
         if not session_id or not command:
             return Response({"error": "Missing 'session_id' or 'command'."}, status=400)
@@ -1700,10 +1813,22 @@ def command_execution(request):
                                 filters['functional'] = value
 
                                 # Extract clustering parameters from filters
-                                zscore_axis, dist_type, linkage_type = extract_clustering_params_from_filters(filters)
+                                zscore_axis, dist_type, linkage_type = \
+                                    extract_clustering_params_from_filters(filters)
 
-                                # Re-cluster the filtered data with clustering params
-                                clustering_result_str = make_cluster(filtered_df, zscore_axis=zscore_axis, dist_type=dist_type, linkage_type=linkage_type)
+                                # Respect the current re-z-score setting
+                                zscore_axis = resolve_zscore_axis(
+                                    transformation,
+                                    zscore_axis
+                                )
+
+                                # Re-cluster the filtered data
+                                clustering_result_str = make_cluster(
+                                    filtered_df,
+                                    zscore_axis=zscore_axis,
+                                    dist_type=dist_type,
+                                    linkage_type=linkage_type
+                                )
                                 clustering_result = json.loads(clustering_result_str)
 
                                 # Count how many genes were actually found
@@ -1765,10 +1890,22 @@ def command_execution(request):
                                 filters['pathway'] = value
 
                                 # Extract clustering parameters from filters
-                                zscore_axis, dist_type, linkage_type = extract_clustering_params_from_filters(filters)
+                                zscore_axis, dist_type, linkage_type = \
+                                    extract_clustering_params_from_filters(filters)
 
-                                # Re-cluster the filtered data with clustering params
-                                clustering_result_str = make_cluster(filtered_df, zscore_axis=zscore_axis, dist_type=dist_type, linkage_type=linkage_type)
+                                # Respect the current re-z-score setting
+                                zscore_axis = resolve_zscore_axis(
+                                    transformation,
+                                    zscore_axis
+                                )
+
+                                # Re-cluster the filtered data
+                                clustering_result_str = make_cluster(
+                                    filtered_df,
+                                    zscore_axis=zscore_axis,
+                                    dist_type=dist_type,
+                                    linkage_type=linkage_type
+                                )
                                 clustering_result = json.loads(clustering_result_str)
 
                                 # Count how many genes were actually found
@@ -1898,14 +2035,19 @@ def command_execution(request):
             final_df.columns = ['' if 'unnamed' in str(col).lower() else str(col) for col in final_df.columns]
 
             if final_df is not None and not final_df.empty:
-                # Extract clustering parameters from the updated filters
-                zscore_axis, dist_type, linkage_type = extract_clustering_params_from_filters(updated_filters)
+                zscore_axis, dist_type, linkage_type = \
+                    extract_clustering_params_from_filters(updated_filters)
 
-                # Override with current action if it's a clustering parameter action
-                # Check if this is a zscore command and pass appropriate axis
+                # An explicit AI z-score command takes precedence.
                 if action == 'zscore':
                     zscore_axis = 'row' if target == 'rows' else 'col'
 
+                # For all other commands, respect the sidebar toggle.
+                else:
+                    zscore_axis = resolve_zscore_axis(
+                        transformation,
+                        zscore_axis
+                    )
                 if action == 'set_distance':
                     dist_type = value
                     # Store distance metric in both row and col filters for persistence
@@ -2571,8 +2713,8 @@ def refresh_heatmap(request):
         # Extract data from request
         session_id = request.data.get('sessionId')
         filters = request.data.get('filters', {})
+        transformation = request.data.get('transformation', {})
     
-        
         # Basic validation
         if not session_id:
             return Response({"error": "Missing 'sessionId'."}, status=400)
@@ -2602,11 +2744,28 @@ def refresh_heatmap(request):
         # Process data and generate clustering result
         if final_df is not None and not final_df.empty:
             try:
-                # Extract clustering parameters from filters using helper function
-                zscore_axis, dist_type, linkage_type = extract_clustering_params_from_filters(filters)
+                # Extract existing clustering parameters
+                zscore_axis, dist_type, linkage_type = \
+                    extract_clustering_params_from_filters(filters)
 
-                # Call make_cluster with all clustering parameters
-                clustering_result_str = make_cluster(final_df, zscore_axis=zscore_axis, dist_type=dist_type, linkage_type=linkage_type)
+                # Respect explicit frontend scaling setting
+                zscore_axis = resolve_zscore_axis(
+                    transformation,
+                    zscore_axis
+                )
+
+                print(
+                    f"🔢 Refresh transformation: "
+                    f"reZscore={transformation.get('reZscore', 'legacy')}, "
+                    f"axis={zscore_axis}"
+                )
+
+                clustering_result_str = make_cluster(
+                    final_df,
+                    zscore_axis=zscore_axis,
+                    dist_type=dist_type,
+                    linkage_type=linkage_type
+                )                   
                 # Parse the clustering result
                 try:
                     clustering_result = json.loads(clustering_result_str)

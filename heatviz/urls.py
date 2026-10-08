@@ -1,8 +1,9 @@
 from django.urls import path
-from .views import process_data_view, cleanup_session,command_execution,correlation_network,refresh_heatmap,estimate_correlation_job,recommend_correlation_parameters,load_example_data,enrich_analysis_view,get_3d_coords_view
+from .views import process_data_view, cleanup_session,command_execution,create_demo_session ,correlation_network,refresh_heatmap,estimate_correlation_job,recommend_correlation_parameters,load_example_data,enrich_analysis_view,get_3d_coords_view
 
 urlpatterns = [
     path('process/', process_data_view, name='process-data'),
+    path('create-demo-session/', create_demo_session, name='create-demo-session'),
     path('cleanup/', cleanup_session, name='cleanup-session'),  
     path('command/', command_execution, name='command-execution'),
     path('network-correlation/', correlation_network, name='correlation-network'),

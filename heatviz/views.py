@@ -1506,31 +1506,40 @@ def validate_command_values(action, target, value, df, metadata=None, filters=No
     # If we get here, validation passed
     return True, None
 
-def resolve_zscore_axis(transformation, fallback_axis='row'):
+def resolve_normalization_settings(
+    transformation,
+    fallback_axis='col'
+):
     """
-    Resolve whether the current matrix should be re-z-scored.
+    Resolve the independent normalization settings.
 
-    New frontend:
-      reZscore=False -> 'None'
-      reZscore=True, axis='row' -> 'row'
-      reZscore=True, axis='col' -> 'col'
+    axis:
+        Base normalization applied to the full session matrix.
 
-    Older callers without transformation keep the existing behavior.
+    reZscoreFilteredSubset:
+        If True, apply a second z-score after subsetting.
     """
-    if not transformation:
-        return fallback_axis
 
-    re_zscore = transformation.get('reZscore', False)
+    axis = fallback_axis
+    re_zscore_filtered_subset = False
 
-    if not re_zscore:
-        return 'None'
+    if transformation:
+        requested_axis = transformation.get(
+            'axis',
+            fallback_axis
+        )
 
-    requested_axis = transformation.get('axis', 'row')
+        if requested_axis in ('row', 'col'):
+            axis = requested_axis
 
-    if requested_axis not in ('row', 'col'):
-        requested_axis = 'row'
+        # New setting name.
+        re_zscore_filtered_subset = transformation.get(
+            'reZscoreFilteredSubset',
+            # Temporary compatibility with the previous frontend.
+            transformation.get('reZscore', False)
+        )
 
-    return requested_axis
+    return axis, re_zscore_filtered_subset
 
 # Replace the section after "Extract data from response" with this:
 @api_view(['POST'])
@@ -1728,6 +1737,44 @@ def command_execution(request):
         target = ollama_response.get("target")
         value = ollama_response.get("value", "")
 
+        # Normalize metadata-directed actions based on the actual
+        # orientation of the metadata in this dataset.
+        if metadata and isinstance(metadata, dict):
+
+            col_metadata_fields = set(
+                metadata.get('col', {}).keys()
+            )
+
+            row_metadata_fields = set(
+                metadata.get('row', {}).keys()
+            )
+
+            # Filtering actions:
+            # If the requested field is column/sample metadata,
+            # always treat it as a sample_filter.
+            if action == 'gene_filter' and target in col_metadata_fields:
+                logger.info(
+                    f"🔄 Correcting gene_filter -> sample_filter "
+                    f"for column metadata field '{target}'"
+                )
+                action = 'sample_filter'
+
+            # And the inverse for true row/gene metadata.
+            elif action == 'sample_filter' and target in row_metadata_fields:
+                logger.info(
+                    f"🔄 Correcting sample_filter -> gene_filter "
+                    f"for row metadata field '{target}'"
+                )
+                action = 'gene_filter'
+
+            # Metadata sorting uses the metadata field in `value`,
+            # rather than `target`.
+            if action == 'sort_by_meta':
+                if value in col_metadata_fields:
+                    target = 'columns'
+                elif value in row_metadata_fields:
+                    target = 'rows'
+
         # 🔍 DEBUG: Log what GPT returned
         logger.info(f"🔍 USER COMMAND: '{command}'")
         logger.info(f"🔍 GPT RAW RESPONSE: {ollama_response}")
@@ -1803,37 +1850,71 @@ def command_execution(request):
                         if functional_genes:
                             
                             # First apply existing filters to the original data
-                            pre_filtered_df = apply_filters(df, filters, session_id) if filters else df
-                            
-                            # Then apply functional filter to the already-filtered data
-                            filtered_df = filter_genes_by_ids(pre_filtered_df, functional_genes)
-                            
-                            # Check if filtering actually worked
-                            if filtered_df.shape[0] > df.iloc[:detect_matrix_start(df)[0], :].shape[0]:  # More than just metadata rows
-                                filters['functional'] = value
+                            raw_pre_filtered_df = apply_filters(
+                                df,
+                                filters,
+                                session_id
+                            ) if filters else df
 
-                                # Extract clustering parameters from filters
-                                zscore_axis, dist_type, linkage_type = \
-                                    extract_clustering_params_from_filters(filters)
+                            selected_raw_df = filter_genes_by_ids(
+                                raw_pre_filtered_df,
+                                functional_genes
+                            )
 
-                                # Respect the current re-z-score setting
-                                zscore_axis = resolve_zscore_axis(
+                            fallback_axis, dist_type, linkage_type = \
+                                extract_clustering_params_from_filters(filters)
+
+                            base_axis, re_zscore_filtered_subset = \
+                                resolve_normalization_settings(
                                     transformation,
-                                    zscore_axis
+                                    fallback_axis
                                 )
 
-                                # Re-cluster the filtered data
+                            base_normalized_df = zscore_dataframe_values(
+                                df,
+                                base_axis
+                            )
+
+                            filtered_df = subset_dataframe_like(
+                                base_normalized_df,
+                                selected_raw_df
+                            )
+
+                            if (
+                                re_zscore_filtered_subset and
+                                filtered_df.shape != base_normalized_df.shape
+                            ):
+                                filtered_df = zscore_dataframe_values(
+                                    filtered_df,
+                                    base_axis
+                                )
+
+                            if filtered_df.shape[0] > df.iloc[:detect_matrix_start(df)[0], :].shape[0]:
+                                filters['functional'] = value
+
+                                # filtered_df is already:
+                                # full-matrix normalized -> subsetted ->
+                                # optionally re-z-scored.
                                 clustering_result_str = make_cluster(
                                     filtered_df,
-                                    zscore_axis=zscore_axis,
+                                    zscore_axis='None',
                                     dist_type=dist_type,
                                     linkage_type=linkage_type
                                 )
-                                clustering_result = json.loads(clustering_result_str)
+
+                                clustering_result = json.loads(
+                                    clustering_result_str
+                                )
 
                                 # Count how many genes were actually found
-                                matrix_start_row, _ = detect_matrix_start(filtered_df)
-                                genes_found = filtered_df.shape[0] - matrix_start_row
+                                matrix_start_row, _ = detect_matrix_start(
+                                    filtered_df
+                                )
+
+                                genes_found = (
+                                    filtered_df.shape[0] -
+                                    matrix_start_row
+                                )
 
                                 response_data = {
                                     "action": action,
@@ -1841,11 +1922,16 @@ def command_execution(request):
                                     "value": value,
                                     "updated_filters": filters,
                                     "clustering_result": clustering_result,
-                                    "functional_info": f"Filtered to {genes_found} genes related to {value}",
-                                    "total_functional_genes": len(functional_genes),
-                                    "genes_in_dataset": genes_found,
-                                    "result_type": "data_filter",
-                                    "commandHistory": command_history + [command]
+                                    "functional_info":
+                                        f"Filtered to {genes_found} genes related to {value}",
+                                    "total_functional_genes":
+                                        len(functional_genes),
+                                    "genes_in_dataset":
+                                        genes_found,
+                                    "result_type":
+                                        "data_filter",
+                                    "commandHistory":
+                                        command_history + [command]
                                 }
                             else:
                                 # Get matrix start to count original genes
@@ -1880,33 +1966,59 @@ def command_execution(request):
                         if pathway_genes:
                             
                             # First apply existing filters to the original data
-                            pre_filtered_df = apply_filters(df, filters, session_id) if filters else df
-                            
-                            # Then apply pathway filter to the already-filtered data
-                            filtered_df = filter_genes_by_ids(pre_filtered_df, pathway_genes)
-                            
-                            # Check if filtering actually worked
-                            if filtered_df.shape[0] > df.iloc[:detect_matrix_start(df)[0], :].shape[0]:  # More than just metadata rows
-                                filters['pathway'] = value
+                            raw_pre_filtered_df = apply_filters(
+                                df,
+                                filters,
+                                session_id
+                            ) if filters else df
 
-                                # Extract clustering parameters from filters
-                                zscore_axis, dist_type, linkage_type = \
-                                    extract_clustering_params_from_filters(filters)
+                            selected_raw_df = filter_genes_by_ids(
+                                raw_pre_filtered_df,
+                                pathway_genes
+                            )
 
-                                # Respect the current re-z-score setting
-                                zscore_axis = resolve_zscore_axis(
+                            fallback_axis, dist_type, linkage_type = \
+                                extract_clustering_params_from_filters(filters)
+
+                            base_axis, re_zscore_filtered_subset = \
+                                resolve_normalization_settings(
                                     transformation,
-                                    zscore_axis
+                                    fallback_axis
                                 )
 
-                                # Re-cluster the filtered data
+                            base_normalized_df = zscore_dataframe_values(
+                                df,
+                                base_axis
+                            )
+
+                            filtered_df = subset_dataframe_like(
+                                base_normalized_df,
+                                selected_raw_df
+                            )
+
+                            if (
+                                re_zscore_filtered_subset and
+                                filtered_df.shape != base_normalized_df.shape
+                            ):
+                                filtered_df = zscore_dataframe_values(
+                                    filtered_df,
+                                    base_axis
+                                )
+
+                            # Check if filtering actually worked
+                            if filtered_df.shape[0] > df.iloc[:detect_matrix_start(df)[0], :].shape[0]:
+                                filters['pathway'] = value
+
                                 clustering_result_str = make_cluster(
                                     filtered_df,
-                                    zscore_axis=zscore_axis,
+                                    zscore_axis='None',
                                     dist_type=dist_type,
                                     linkage_type=linkage_type
                                 )
-                                clustering_result = json.loads(clustering_result_str)
+
+                                clustering_result = json.loads(
+                                    clustering_result_str
+                                )
 
                                 # Count how many genes were actually found
                                 matrix_start_row, _ = detect_matrix_start(filtered_df)
@@ -2032,22 +2144,54 @@ def command_execution(request):
                 updated_filters = update_filters(filters, action, target, value)
                 final_df = apply_filters(df, updated_filters, session_id)
 
-            final_df.columns = ['' if 'unnamed' in str(col).lower() else str(col) for col in final_df.columns]
-
             if final_df is not None and not final_df.empty:
-                zscore_axis, dist_type, linkage_type = \
-                    extract_clustering_params_from_filters(updated_filters)
 
-                # An explicit AI z-score command takes precedence.
-                if action == 'zscore':
-                    zscore_axis = 'row' if target == 'rows' else 'col'
+                # final_df currently represents the subset selected
+                # from the original/raw matrix.
+                selected_raw_df = final_df
 
-                # For all other commands, respect the sidebar toggle.
-                else:
-                    zscore_axis = resolve_zscore_axis(
-                        transformation,
-                        zscore_axis
+                fallback_axis, dist_type, linkage_type = \
+                    extract_clustering_params_from_filters(
+                        updated_filters
                     )
+
+                base_axis, re_zscore_filtered_subset = \
+                    resolve_normalization_settings(
+                        transformation,
+                        fallback_axis
+                    )
+
+                # Explicit AI z-score command overrides the selected base axis
+                # for this command.
+                if action == 'zscore':
+                    if target in ('rows', 'row'):
+                        base_axis = 'row'
+                    elif target in ('cols', 'columns', 'col'):
+                        base_axis = 'col'
+
+                # Normalize the complete canonical matrix first.
+                base_normalized_df = zscore_dataframe_values(
+                    df,
+                    base_axis
+                )
+
+                # Then take exactly the subset selected from raw values.
+                final_df = subset_dataframe_like(
+                    base_normalized_df,
+                    selected_raw_df
+                )
+
+                was_subsetted = (
+                    final_df.shape != base_normalized_df.shape
+                )
+
+                # Optional second normalization only after filtering.
+                if re_zscore_filtered_subset and was_subsetted:
+                    final_df = zscore_dataframe_values(
+                        final_df,
+                        base_axis
+                    )
+
                 if action == 'set_distance':
                     dist_type = value
                     # Store distance metric in both row and col filters for persistence
@@ -2111,8 +2255,46 @@ def command_execution(request):
                             })
 
                 # Call make_cluster with all parameters including linkage_type
-                print(f"🔧 CALLING make_cluster with: zscore_axis={zscore_axis}, dist_type={dist_type}, linkage_type={linkage_type}")
-                clustering_result_str = make_cluster(final_df, zscore_axis=zscore_axis, dist_type=dist_type, linkage_type=linkage_type)
+                print(
+                    f"🔧 CALLING make_cluster with: "
+                    f"base_axis={base_axis}, "
+                    f"reZscoreFilteredSubset={re_zscore_filtered_subset}, "
+                    f"dist_type={dist_type}, "
+                    f"linkage_type={linkage_type}"
+                )
+
+                matrix_start_row, matrix_start_col = detect_matrix_start(
+                    final_df
+                )
+
+                numeric_row_count = (
+                    final_df.shape[0] - matrix_start_row
+                )
+
+                numeric_col_count = (
+                    final_df.shape[1] - matrix_start_col
+                )
+
+                print(
+                    "🧪 FINAL MATRIX BEFORE make_cluster:",
+                    {
+                        "total_shape": final_df.shape,
+                        "matrix_start_row": matrix_start_row,
+                        "matrix_start_col": matrix_start_col,
+                        "numeric_rows": numeric_row_count,
+                        "numeric_cols": numeric_col_count,
+                        "sample_columns": list(
+                            final_df.columns[matrix_start_col:]
+                        )
+                    }
+                )
+
+                clustering_result_str = make_cluster(
+                    final_df,
+                    zscore_axis='None',
+                    dist_type=dist_type,
+                    linkage_type=linkage_type
+                )
 
                 clustering_result = json.loads(clustering_result_str)
                 print(f"🔧 CLUSTERING RESULT: Got {len(str(clustering_result))} chars of data")
@@ -2152,7 +2334,7 @@ def extract_clustering_params_from_filters(filters):
     Extract zscore_axis, dist_type, and linkage_type from filters.
     Returns tuple: (zscore_axis, dist_type, linkage_type)
     """
-    zscore_axis = 'row'  # Default — keep refresh consistent with initial render
+    zscore_axis = 'col'  # Default
     dist_type = 'euclidean'  # Default
     linkage_type = 'average'  # Default
 
@@ -2725,15 +2907,76 @@ def refresh_heatmap(request):
         if not os.path.exists(file_path):
             return Response({"error": "Session data not found."}, status=404)
         
-        # ✅ Load Original Data
+        # Load canonical session data
         df = pd.read_csv(file_path, sep="\t")
-        
-        # ✅ Apply additional filters using your existing function
+
+        # Determine filtering/subsetting from the ORIGINAL values.
         if filters:
-            final_df = apply_filters(df, filters, session_id)
-            print(f"After applying filters shape: {final_df.shape}")
+            selected_raw_df = apply_filters(
+                df,
+                filters,
+                session_id
+            )
         else:
-            final_df = df
+            selected_raw_df = df
+
+        # Re-apply functional/pathway subsets when present.
+        if filters.get('functional'):
+            functional_genes = get_functional_genes(
+                filters['functional']
+            )
+
+            if functional_genes:
+                selected_raw_df = filter_genes_by_ids(
+                    selected_raw_df,
+                    functional_genes
+                )
+
+        if filters.get('pathway'):
+            pathway_genes = get_pathway_genes(
+                filters['pathway'],
+                'pathway_filter'
+            )
+
+            if pathway_genes:
+                selected_raw_df = filter_genes_by_ids(
+                    selected_raw_df,
+                    pathway_genes
+                )
+
+        # Existing clustering settings.
+        fallback_axis, dist_type, linkage_type = \
+            extract_clustering_params_from_filters(filters)
+
+        # Independent normalization settings.
+        base_axis, re_zscore_filtered_subset = \
+            resolve_normalization_settings(
+                transformation,
+                fallback_axis
+            )
+
+        # Normalize the FULL matrix first.
+        base_normalized_df = zscore_dataframe_values(
+            df,
+            base_axis
+        )
+
+        # Then take exactly the subset selected from the raw data.
+        final_df = subset_dataframe_like(
+            base_normalized_df,
+            selected_raw_df
+        )
+
+        was_subsetted = (
+            final_df.shape != base_normalized_df.shape
+        )
+
+        # Optional second normalization of the subset.
+        if re_zscore_filtered_subset and was_subsetted:
+            final_df = zscore_dataframe_values(
+                final_df,
+                base_axis
+            )
 
         
        # ✅ Compute Correlation Matrix
@@ -2748,12 +2991,6 @@ def refresh_heatmap(request):
                 zscore_axis, dist_type, linkage_type = \
                     extract_clustering_params_from_filters(filters)
 
-                # Respect explicit frontend scaling setting
-                zscore_axis = resolve_zscore_axis(
-                    transformation,
-                    zscore_axis
-                )
-
                 print(
                     f"🔢 Refresh transformation: "
                     f"reZscore={transformation.get('reZscore', 'legacy')}, "
@@ -2762,10 +2999,10 @@ def refresh_heatmap(request):
 
                 clustering_result_str = make_cluster(
                     final_df,
-                    zscore_axis=zscore_axis,
+                    zscore_axis='None',
                     dist_type=dist_type,
                     linkage_type=linkage_type
-                )                   
+                )
                 # Parse the clustering result
                 try:
                     clustering_result = json.loads(clustering_result_str)
@@ -3758,6 +3995,103 @@ def detect_matrix_start(df) -> tuple:
         logger.warning(f"Could not detect matrix start column, defaulting to {matrix_start_col}")
 
     return matrix_start_row, matrix_start_col
+
+def zscore_dataframe_values(df, axis='row'):
+    """
+    Z-score only the numeric matrix region.
+
+    Metadata rows and metadata columns are preserved unchanged.
+    """
+    import numpy as np
+    import pandas as pd
+
+    result = df.copy()
+
+    matrix_start_row, matrix_start_col = \
+        detect_matrix_start(result)
+
+    values = result.iloc[
+        matrix_start_row:,
+        matrix_start_col:
+    ].apply(pd.to_numeric, errors='coerce')
+
+    if axis == 'col':
+        means = values.mean(axis=0)
+        stds = values.std(axis=0, ddof=1)
+
+        safe_stds = stds.replace(0, np.nan)
+
+        normalized = (
+            values
+            .sub(means, axis=1)
+            .div(safe_stds, axis=1)
+        )
+
+        # Constant / single-value columns become zero
+        # while existing missing values remain missing.
+        invalid_cols = stds[
+            (stds == 0) | stds.isna()
+        ].index
+
+        for col in invalid_cols:
+            mask = values[col].notna()
+            normalized.loc[mask, col] = 0.0
+
+    else:
+        means = values.mean(axis=1)
+        stds = values.std(axis=1, ddof=1)
+
+        safe_stds = stds.replace(0, np.nan)
+
+        normalized = (
+            values
+            .sub(means, axis=0)
+            .div(safe_stds, axis=0)
+        )
+
+        # Constant / single-value rows become zero
+        # while existing missing values remain missing.
+        invalid_rows = stds[
+            (stds == 0) | stds.isna()
+        ].index
+
+        for idx in invalid_rows:
+            mask = values.loc[idx].notna()
+            normalized.loc[idx, mask] = 0.0
+
+    result.iloc[
+        matrix_start_row:,
+        matrix_start_col:
+    ] = normalized
+
+    return result
+
+
+def subset_dataframe_like(reference_df, selected_df):
+    """
+    Take the exact row/column subset represented by selected_df
+    from reference_df.
+
+    This allows filtering decisions to be calculated using raw data,
+    while displaying values normalized from the full matrix.
+    """
+
+    selected_rows = [
+        idx
+        for idx in selected_df.index
+        if idx in reference_df.index
+    ]
+
+    selected_columns = [
+        col
+        for col in selected_df.columns
+        if col in reference_df.columns
+    ]
+
+    return reference_df.loc[
+        selected_rows,
+        selected_columns
+    ].copy()
 
 # def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
 def apply_filters(df, filters,session_id=None):

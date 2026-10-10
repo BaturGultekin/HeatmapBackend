@@ -1245,42 +1245,119 @@ def optimized_sort_rank_nodes(mat, axis, rank_type):
     return ranking.tolist()
 
 
-def clust_and_group(net, inst_dm, axis, mat, dist_type='cosine', linkage_type='average',
-                    clust_library='scipy', min_samples=1, min_cluster_size=2):
-    """Optimized clustering with better error handling."""
-    
+def clust_and_group(
+    net,
+    inst_dm,
+    axis,
+    mat,
+    dist_type='cosine',
+    linkage_type='average',
+    clust_library='scipy',
+    min_samples=1,
+    min_cluster_size=2
+):
+    """Optimized clustering with singleton-axis handling and robust fallback."""
+
+    n = len(net.dat['nodes'][axis])
+
+    # A single row/column cannot be hierarchically clustered.
+    # Preserve the one node in its original position and provide
+    # the complete set of grouping levels expected by make_viz.
+    if n == 1:
+        print(
+            f"ℹ️ Skipping {axis} clustering: "
+            f"only one node remains"
+        )
+
+        singleton_order = [0]
+
+        # Valid empty linkage representation for a singleton axis.
+        singleton_Y = np.empty((0, 4), dtype=float)
+
+        # make_viz expects all clustering-depth keys:
+        # '00', '01', ..., '09', '10'
+        singleton_groups = {
+            str(cutoff).replace('.', ''): [1]
+            for cutoff in group_cutoffs()
+        }
+
+        return (
+            singleton_order,
+            singleton_Y,
+            singleton_groups
+        )
+
     try:
         if clust_library == 'scipy':
-            Y = hier.linkage(inst_dm, method=linkage_type)
-            
+            Y = hier.linkage(
+                inst_dm,
+                method=linkage_type
+            )
+
         elif clust_library == 'fastcluster':
             import fastcluster
-            Y = fastcluster.linkage(inst_dm, method=linkage_type)
-            
+
+            Y = fastcluster.linkage(
+                inst_dm,
+                method=linkage_type
+            )
+
         elif clust_library == 'hdbscan':
-            return _hdbscan_clustering(net, axis, mat, dist_type, 
-                                     min_samples, min_cluster_size)
-        
+            return _hdbscan_clustering(
+                net,
+                axis,
+                mat,
+                dist_type,
+                min_samples,
+                min_cluster_size
+            )
+
         # Generate dendrogram
-        Z = hier.dendrogram(Y, no_plot=True)
+        Z = hier.dendrogram(
+            Y,
+            no_plot=True
+        )
+
         inst_clust_order = Z['leaves']
-        
+
         # Generate groups efficiently
-        groups = _generate_cluster_groups(Y, inst_dm)
-        
-        return inst_clust_order, Y, groups
-        
+        groups = _generate_cluster_groups(
+            Y,
+            inst_dm
+        )
+
+        return (
+            inst_clust_order,
+            Y,
+            groups
+        )
+
     except Exception as e:
-        print(f"❌ Clustering failed: {e}")
+        print(
+            f"❌ Clustering failed for {axis}: {e}"
+        )
         traceback.print_exc()
-        
-        # Return fallback clustering (original order)
-        n = len(net.dat['nodes'][axis])
+
+        # Preserve original ordering if clustering fails.
         fallback_order = list(range(n))
-        fallback_Y = np.zeros((n-1, 4))  # Minimal linkage matrix
-        fallback_groups = {'00': [1] * n}  # All in one group
-        
-        return fallback_order, fallback_Y, fallback_groups
+
+        # Minimal linkage representation.
+        fallback_Y = np.empty(
+            (max(n - 1, 0), 4),
+            dtype=float
+        )
+
+        # Provide ALL grouping levels expected by make_viz.
+        fallback_groups = {
+            str(cutoff).replace('.', ''): [1] * n
+            for cutoff in group_cutoffs()
+        }
+
+        return (
+            fallback_order,
+            fallback_Y,
+            fallback_groups
+        )
 
 
 def _hdbscan_clustering(net, axis, mat, dist_type, min_samples, min_cluster_size):

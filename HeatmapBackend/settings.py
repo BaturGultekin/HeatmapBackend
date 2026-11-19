@@ -24,7 +24,9 @@ sys.path.append(os.path.join(BASE_DIR, 'heatviz/clustergrammer2'))
 SECRET_KEY = 'django-insecure-9-obe0+p-lyqf$fvgypjb&rk^rzibu8$bk2z2ln-%-=^!)nk*z'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get(
+    'DJANGO_DEBUG', 'False'
+).lower() == 'true'
 
 # ALLOWED_HOSTS can be extended via DJANGO_ALLOWED_HOSTS env var (comma-separated)
 ALLOWED_HOSTS = [

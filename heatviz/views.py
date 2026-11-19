@@ -50,6 +50,7 @@ import math, os, random, uuid, logging, threading, copy, json
 from typing import List, Dict, Any
 import traceback
 import requests
+import re as axis_re
 
 from django.http import HttpResponse, JsonResponse
 from rest_framework.decorators import api_view, parser_classes
@@ -1367,33 +1368,98 @@ def validate_command_values(action, target, value, df, metadata=None, filters=No
     """
     import pandas as pd
 
-    # Handle multi-filter actions - validate each filter in the list
+    # Handle multi-filter actions - validate against either metadata axis.
     if action in ["multi_filter", "multi_exclude"]:
         if not filters:
-            return True, None  # No filters to validate
+            return True, None
+
+        if not isinstance(metadata, dict) or not metadata:
+            return True, None
+
+        row_fields = metadata.get("row", {}) or {}
+        col_fields = metadata.get("col", {}) or {}
+
+        criteria_axis = None
 
         for filter_obj in filters:
             filter_target = filter_obj.get("target")
             filter_value = filter_obj.get("value")
 
-            if metadata and 'col' in metadata:
-                if filter_target in metadata['col']:
-                    available_values = metadata['col'][filter_target]
-                    if filter_value not in available_values:
-                        return False, f"value not found: '{filter_value}' not available in {filter_target} field. Available values: {', '.join(available_values[:10])}"
-                else:
-                    return False, f"value not found: '{filter_target}' field not found in column metadata. Available fields: {', '.join(metadata['col'].keys())}"
+            if filter_target is None or filter_value is None:
+                return False, "Invalid filter: missing target or value."
+
+            in_rows = filter_target in row_fields
+            in_cols = filter_target in col_fields
+
+            if in_rows and in_cols:
+                return False, (
+                    f"Metadata field '{filter_target}' exists on both axes. "
+                    "The combined filter is ambiguous."
+                )
+
+            if not in_rows and not in_cols:
+                return False, (
+                    f"Metadata field '{filter_target}' not found "
+                    "in row or column metadata."
+                )
+
+            current_axis = "row" if in_rows else "col"
+
+            if criteria_axis is None:
+                criteria_axis = current_axis
+
+            elif current_axis != criteria_axis:
+                return False, (
+                    "All conditions in a combined filter must belong "
+                    "to the same metadata axis."
+                )
+
+            available_values = (
+                row_fields[filter_target]
+                if in_rows
+                else col_fields[filter_target]
+            )
+
+            if filter_value not in available_values:
+                return False, (
+                    f"value not found: '{filter_value}' not available "
+                    f"in {filter_target} field. Available values: "
+                    f"{', '.join(map(str, available_values[:10]))}"
+                )
+
         return True, None
 
-    # Handle exclude_filter - same validation as sample_filter
+
+
+    # Validate exclusion against the physical metadata axis.
     if action == "exclude_filter":
-        if metadata and 'col' in metadata:
-            if target in metadata['col']:
-                available_values = metadata['col'][target]
-                if value not in available_values:
-                    return False, f"value not found: '{value}' not available in {target} field. Available values: {', '.join(available_values[:10])}"
-            else:
-                return False, f"value not found: '{target}' field not found in column metadata"
+        row_fields = metadata.get("row", {}) if isinstance(metadata, dict) else {}
+        col_fields = metadata.get("col", {}) if isinstance(metadata, dict) else {}
+
+        in_rows = target in row_fields
+        in_cols = target in col_fields
+
+        if in_rows and in_cols:
+            return False, (
+                f"Metadata field '{target}' exists on both axes. "
+                "Exclusion is ambiguous."
+            )
+
+        if not in_rows and not in_cols:
+            return False, (
+                f"value not found: '{target}' field not found "
+                "in row or column metadata"
+            )
+
+        available_values = row_fields[target] if in_rows else col_fields[target]
+
+        if value not in available_values:
+            return False, (
+                f"value not found: '{value}' not available in "
+                f"{target} field. Available values: "
+                f"{', '.join(available_values[:10])}"
+            )
+
         return True, None
 
     # Handle clear_filters - always valid
@@ -1421,22 +1487,51 @@ def validate_command_values(action, target, value, df, metadata=None, filters=No
                 return False, f"value not found: '{target}' field not found in row metadata"
     
     elif action == "search":
-        # Check if the gene exists in the first column (Unnamed: 0)
-        # Skip NaN values since first few rows contain metadata
-        if hasattr(df, 'columns') and len(df.columns) > 0:
-            # Get the first column and filter out NaN values
-            first_column = df.iloc[:, 0].dropna()  # Remove NaN values
-            gene_names = first_column.tolist()
+        # Infer which physical matrix axis contains biological features.
+        has_row_metadata = bool(
+            metadata
+            and isinstance(metadata, dict)
+            and metadata.get("row")
+        )
+        has_col_metadata = bool(
+            metadata
+            and isinstance(metadata, dict)
+            and metadata.get("col")
+        )
+
+        if has_row_metadata and not has_col_metadata:
+            feature_axis = "columns"
+        else:
+            # Preserve existing behavior for column metadata, no metadata,
+            # or ambiguous metadata on both axes.
+            feature_axis = "rows"
+
+        if hasattr(df, "columns") and len(df.columns) > 0:
+            matrix_start_row, matrix_start_col = detect_matrix_start(df)
+
+            if feature_axis == "columns":
+                feature_names = [
+                    str(name)
+                    for name in df.columns[matrix_start_col:]
+                    if pd.notna(name)
+                ]
+            else:
+                first_column = df.iloc[matrix_start_row:, 0].dropna()
+                feature_names = [
+                    str(name)
+                    for name in first_column.tolist()
+                    if pd.notna(name)
+                ]
+
+            feature_names_lower = [name.lower() for name in feature_names]
+
+            if str(value).lower() not in feature_names_lower:
+                example_features = feature_names[:5]
+                return False, (
+                    f"value not found: '{value}' not found in feature list. "
+                    f"Example features: {', '.join(example_features)} ...."
+                )
             
-            if value not in gene_names:
-                # Try case-insensitive search
-                gene_names_lower = [str(g).lower() for g in gene_names if pd.notna(g)]
-                if value.lower() not in gene_names_lower:
-                    # Show first few gene names as examples (skip NaN values)
-                    valid_genes = [g for g in gene_names if pd.notna(g)]
-                    example_genes = valid_genes[:5] if len(valid_genes) >= 5 else valid_genes
-                    return False, f"value not found: '{value}' not found in gene list. Example genes: {', '.join(map(str, example_genes))} ...."
-    
     elif action == "sort_by_meta":
         # Check if the metadata field exists
         if target in ["columns", "cols"]:
@@ -1515,18 +1610,51 @@ def validate_command_values(action, target, value, df, metadata=None, filters=No
         if linkage_val and linkage_val.lower() not in valid_linkage_methods:
             return False, f"invalid linkage method: '{linkage_val}'. Valid options: {', '.join(valid_linkage_methods)}"
 
-    elif action == "sort_by_expression":
-        # Check if the gene exists in the first column (gene names)
-        if hasattr(df, 'columns') and len(df.columns) > 0:
-            first_column = df.iloc[:, 0].dropna()
-            gene_names = [str(g) for g in first_column.tolist() if pd.notna(g)]
 
-            if value not in gene_names:
-                # Try case-insensitive search
-                gene_names_lower = [g.lower() for g in gene_names]
-                if value.lower() not in gene_names_lower:
-                    example_genes = gene_names[:5] if len(gene_names) >= 5 else gene_names
-                    return False, f"gene not found: '{value}' not found in gene list. Example genes: {', '.join(example_genes)} ...."
+    elif action == "sort_by_expression":
+        has_row_metadata = bool(
+            isinstance(metadata, dict) and metadata.get("row")
+        )
+        has_col_metadata = bool(
+            isinstance(metadata, dict) and metadata.get("col")
+        )
+
+        if has_row_metadata and has_col_metadata:
+            return False, (
+                "Cannot determine the biological feature axis because "
+                "metadata exists on both rows and columns."
+            )
+
+        if not isinstance(value, str) or not value.strip():
+            return False, "Expression sorting requires a valid feature name."
+
+        matrix_start_row, matrix_start_col = detect_matrix_start(df)
+
+        if has_row_metadata and not has_col_metadata:
+            # Samples are rows; features are columns.
+            feature_names = [
+                str(name)
+                for name in df.columns[matrix_start_col:]
+                if pd.notna(name)
+            ]
+        else:
+            # Features are rows (existing default when no metadata).
+            feature_names = [
+                str(name)
+                for name in df.iloc[matrix_start_row:, 0].dropna().tolist()
+                if pd.notna(name)
+            ]
+
+        feature_names_lower = [
+            name.casefold() for name in feature_names
+        ]
+
+        if value.strip().casefold() not in feature_names_lower:
+            example_features = feature_names[:5]
+            return False, (
+                f"Feature not found: '{value}' is not in the feature list. "
+                f"Example features: {', '.join(example_features)}."
+            )
 
     # If we get here, validation passed
     return True, None
@@ -2046,10 +2174,40 @@ def command_execution(request):
             # Metadata sorting uses the metadata field in `value`,
             # rather than `target`.
             if action == 'sort_by_meta':
-                if value in col_metadata_fields:
+                in_columns = value in col_metadata_fields
+                in_rows = value in row_metadata_fields
+
+                if in_columns and not in_rows:
                     target = 'columns'
-                elif value in row_metadata_fields:
+
+                elif in_rows and not in_columns:
                     target = 'rows'
+
+                elif in_rows and in_columns:
+                    # The model's target alone does not establish
+                    # whether the user explicitly chose an axis.
+                    explicit_rows = bool(axis_re.search(
+                        r'\b(?:rows?|y[\s-]+axis|vertical)\b',
+                        str(command or ''),
+                        axis_re.IGNORECASE
+                    ))
+                    explicit_columns = bool(axis_re.search(
+                        r'\b(?:columns?|cols?|x[\s-]+axis|horizontal)\b',
+                        str(command or ''),
+                        axis_re.IGNORECASE
+                    ))
+
+                    if explicit_rows == explicit_columns:
+                        return Response({
+                            "error": (
+                                f'Metadata field "{value}" exists on both axes. '
+                                f'Please specify "sort rows by {value}" '
+                                f'or "sort columns by {value}".'
+                            ),
+                            "commandHistory": command_history + [command]
+                        }, status=200)
+
+                    target = 'rows' if explicit_rows else 'columns'
 
         # 🔍 DEBUG: Log what GPT returned
         logger.info(f"🔍 USER COMMAND: '{command}'")
@@ -2124,13 +2282,20 @@ def command_execution(request):
                         functional_genes = get_functional_genes(value)
 
                         if functional_genes:
-                            
+
                             # First apply existing filters to the original data
                             raw_pre_filtered_df = apply_filters(
                                 df,
                                 filters,
                                 session_id
                             ) if filters else df
+
+                            # NEW: Stop if previous filters removed all data
+                            if raw_pre_filtered_df.empty:
+                                return Response({
+                                    "error": "Filtering resulted in an empty dataset.",
+                                    "commandHistory": command_history + [command]
+                                }, status=200)
 
                             selected_raw_df = filter_genes_by_ids(
                                 raw_pre_filtered_df,
@@ -2240,13 +2405,20 @@ def command_execution(request):
                         pathway_genes = get_pathway_genes(value, action)
 
                         if pathway_genes:
-                            
+
                             # First apply existing filters to the original data
                             raw_pre_filtered_df = apply_filters(
                                 df,
                                 filters,
                                 session_id
                             ) if filters else df
+
+                            # NEW: Stop if previous filters removed all data
+                            if raw_pre_filtered_df.empty:
+                                return Response({
+                                    "error": "Filtering resulted in an empty dataset.",
+                                    "commandHistory": command_history + [command]
+                                }, status=200)
 
                             selected_raw_df = filter_genes_by_ids(
                                 raw_pre_filtered_df,
@@ -2333,7 +2505,6 @@ def command_execution(request):
                             
                     except Exception as e:
                         print(f"Error in pathway_filter: {str(e)}")
-                        import traceback
                         traceback.print_exc()
                         response_data = {
                             "error": f"Error processing pathway: {str(e)}",
@@ -2386,7 +2557,7 @@ def command_execution(request):
 
             if action in MULTI_FILTER_ACTIONS:
                 filter_list = ollama_response.get("filters", [])
-                updated_filters = update_filters_multi(filters, action, filter_list=filter_list, target=target, value=value)
+                updated_filters = update_filters_multi(filters, action, filter_list=filter_list, target=target, value=value, metadata=metadata)
 
                 # Apply the updated filters
                 final_df = apply_filters(df, updated_filters, session_id) if updated_filters.get('row') or updated_filters.get('col') else df
@@ -3201,6 +3372,12 @@ def refresh_heatmap(request):
         else:
             selected_raw_df = df
 
+        # NEW: Stop before normalization or clustering if filtering is empty
+        if selected_raw_df.empty:
+            return Response({
+                "error": "Filtering resulted in an empty dataset."
+            }, status=400)
+
         # Re-apply functional/pathway subsets when present.
         if filters.get('functional'):
             functional_genes = get_functional_genes(
@@ -3838,6 +4015,32 @@ def build_prompt(command, command_history=None, filters=None, metadata=None):
         command_history = []
     if filters is None:
         filters = {}
+
+    has_row_metadata = bool(metadata and isinstance(metadata, dict) and metadata.get("row"))
+    has_col_metadata = bool(metadata and isinstance(metadata, dict) and metadata.get("col"))
+
+    # Infer biological axis semantics from metadata placement.
+    # This mirrors the frontend rule used for feature-cluster interaction.
+    if has_col_metadata and not has_row_metadata:
+        feature_axis = "rows"
+        sample_axis = "columns"
+        axis_semantics_ambiguous = False
+    elif has_row_metadata and not has_col_metadata:
+        feature_axis = "columns"
+        sample_axis = "rows"
+        axis_semantics_ambiguous = False
+    elif not has_row_metadata and not has_col_metadata:
+        # Preserve existing behavior when no metadata is available.
+        feature_axis = "rows"
+        sample_axis = "columns"
+        axis_semantics_ambiguous = False
+    else:
+        # Metadata on both axes does not safely identify feature vs sample axis.
+        feature_axis = None
+        sample_axis = None
+        axis_semantics_ambiguous = True
+
+
     
     prompt = (
         "You are an expert data analysis assistant for exploring biological datasets through heatmap visualizations.\n"
@@ -3864,8 +4067,8 @@ def build_prompt(command, command_history=None, filters=None, metadata=None):
         "Valid Actions:\n"
         "  - 'sort'             : Sort rows or columns. Valid 'value' options: 'alphabetical', 'sum', 'variance'.\n"
         "  - 'sort_by_meta'     : Sort/group/cluster rows or columns BY A METADATA FIELD. Use when user says 'sort by X', 'cluster by X', 'group by X' where X is a metadata field like Sex, Timepoint, Response, Gene Type, etc. 'target' is 'rows' or 'columns', 'value' is the metadata category name.\n"
-        "  - 'sort_by_expression': Sort samples/columns by expression of a specific gene. 'target' is 'columns', 'value' is the gene name (e.g., 'FASLG').\n"
-        "  - 'cluster'          : Perform hierarchical clustering. 'y axis'/'vertical'/'genes'/'proteins' = rows. 'x axis'/'horizontal'/'samples' = columns. 'cluster y axis' means target='rows'.\n"
+        "  - 'sort_by_expression': Sort samples by expression of a specific biological feature.\n Use the physical sample axis ('rows' or 'columns') specified in DATASET AXIS SEMANTICS as the target.\n The 'value' is the feature identifier (e.g., 'FASLG').\n If biological axis semantics are ambiguous, do not guess the target.\n"
+        "  - 'cluster'          : Perform hierarchical clustering on rows, columns, or both. \n Explicit axis terms are literal: 'y axis'/'vertical' = rows and 'x axis'/'horizontal' = columns.\n Biological terms such as genes/proteins/features and samples/patients must follow the DATASET AXIS SEMANTICS given below.\n"
         "  - 'search'           : Search for a specific gene or biomarker. 'value' should be the search term.\n"
         "  - 'sample_filter'    : Filter samples based on SINGLE metadata condition. 'target' is the metadata field, 'value' is the filter value.\n"
         "  - 'gene_filter'      : Filter rows/genes based on metadata. 'target' is the metadata field, 'value' is the filter value.\n"
@@ -3884,6 +4087,22 @@ def build_prompt(command, command_history=None, filters=None, metadata=None):
         "  - 'functional_filter': Filter genes by biological function. 'value' is the function name.\n\n"
     )
 
+    if axis_semantics_ambiguous:
+        prompt += (
+            "DATASET AXIS SEMANTICS:\n"
+            "- Feature/sample axis semantics are ambiguous because metadata exists on both axes.\n"
+            "- Do NOT silently assume that genes/features are rows or that samples are columns.\n"
+            "- Explicit terms such as 'rows', 'columns', 'x axis', and 'y axis' still refer to their literal matrix axes.\n\n"
+        )
+    else:
+        prompt += (
+            "DATASET AXIS SEMANTICS:\n"
+            f"- Biological features/genes/proteins/markers are on the {feature_axis}.\n"
+            f"- Samples/patients/observations are on the {sample_axis}.\n"
+            "- Explicit terms such as 'rows', 'columns', 'x axis', and 'y axis' always refer to their literal matrix axes.\n"
+            "- When the user uses biological terms such as genes, proteins, markers, features, samples, or patients, "
+            "map them according to these dataset-specific axis semantics.\n\n"
+        )
         
     # Add metadata information in a structured format
     if metadata and isinstance(metadata, dict):
@@ -4067,11 +4286,13 @@ Combined Clustering Parameters (set BOTH distance AND linkage in one command):
 NOTE: Use "set_clustering" when BOTH distance AND linkage are mentioned in the same command.
 Use "set_distance" or "set_linkage" when only ONE is mentioned.
 
-Sort by Expression Commands (sort columns by a GENE's expression values):
-"sort samples by FASLG expression" → {{ "action": "sort_by_expression", "target": "columns", "value": "FASLG" }}
-"sort columns by TP53" → {{ "action": "sort_by_expression", "target": "columns", "value": "TP53" }}
-"order samples by BRCA1 expression" → {{ "action": "sort_by_expression", "target": "columns", "value": "BRCA1" }}
-"sort by CD8A" → {{ "action": "sort_by_expression", "target": "columns", "value": "CD8A" }}
+Sort by Expression Commands:
+For sort_by_expression, the target is the physical axis containing samples, as defined in DATASET AXIS SEMANTICS.
+"sort samples by FASLG expression" → Use sort_by_expression with value "FASLG" and target equal to the physical sample axis.
+"order samples by BRCA1 expression" → Use sort_by_expression with value "BRCA1" and target equal to the physical sample axis.
+"sort by CD8A" → Use sort_by_expression with value "CD8A" and target equal to the physical sample axis.
+Explicit "rows" and "columns" always refer to physical matrix axes. Do not reinterpret an explicitly requested axis as a biological axis.
+If the biological feature/sample axes are ambiguous, do not guess the expression-sort target.
 
 CRITICAL RULE FOR "sort by X" COMMANDS:
 - FIRST check if X matches ANY metadata field name listed above (Sex, Timepoint, Response, etc.)
@@ -4081,12 +4302,22 @@ CRITICAL RULE FOR "sort by X" COMMANDS:
 - Example: "sort by HGF" - HGF is not a metadata field, so use sort_by_expression with value "HGF"
 
 Sort/Group by Metadata Commands (all variations map to sort_by_meta):
-"sort by Sex" → {{ "action": "sort_by_meta", "target": "columns", "value": "Sex" }}
-"cluster by Gender" → {{ "action": "sort_by_meta", "target": "columns", "value": "Gender" }}
-"group samples by Timepoint" → {{ "action": "sort_by_meta", "target": "columns", "value": "Timepoint" }}
-"sort samples by Response" → {{ "action": "sort_by_meta", "target": "columns", "value": "Response" }}
-"cluster rows by Gene Type" → {{ "action": "sort_by_meta", "target": "rows", "value": "Gene Type" }}
-"group genes by Pathway" → {{ "action": "sort_by_meta", "target": "rows", "value": "Pathway" }}
+- Metadata sorting must target the physical axis containing the requested metadata field.
+- Use the available dataset metadata to determine whether the field belongs to rows or columns.
+- Do NOT assume that sample metadata always belongs to columns or feature metadata always belongs to rows.
+- When the user explicitly requests rows or columns, respect that physical axis and validate that the metadata field exists there.
+- When the user refers to samples, patients, genes, proteins, or features, follow DATASET AXIS SEMANTICS.
+
+Examples:
+"sort by Sex" → Use sort_by_meta with value "Sex" and target equal to the axis containing Sex metadata.
+"cluster by Gender" → Use sort_by_meta with value "Gender" and target equal to the axis containing Gender metadata.
+"group samples by Timepoint" → Use sort_by_meta with value "Timepoint" and target equal to the physical sample axis.
+"sort samples by Response" → Use sort_by_meta with value "Response" and target equal to the physical sample axis.
+"cluster rows by Gene Type" → Use sort_by_meta with target "rows" only if Gene Type metadata exists on physical rows.
+"group genes by Pathway" → Use sort_by_meta with value "Pathway" and target equal to the axis containing Pathway metadata.
+
+If the requested metadata field exists on both axes and the intended target is unclear, do not arbitrarily select an axis.
+
 
 Variance Selection (select top N most variable/variant rows):
 "top 50 genes" → {{ "action": "variance", "target": "rows", "value": "50" }}
@@ -4408,41 +4639,146 @@ def apply_filters(df, filters,session_id=None):
             elif f.get("type") == "gene_filter":
                 field = f.get("field")
                 value = f.get("value")
+
                 if not field or not value:
                     continue
-                field_lower = field.lower()
-                value_lower = value.lower()
+
+                field_lower = str(field).strip().lower()
+                value_lower = str(value).strip().lower()
 
                 matching_rows = []
+
                 for row_idx in range(matrix_start_row, filtered_df.shape[0]):
                     index_val = filtered_df.index[row_idx]
+
                     if index_val not in filtered_row_indices:
                         continue
 
+                    match_found = False
+
                     for col_idx in range(matrix_start_col):
-                        cell_value = str(filtered_df.iloc[row_idx, col_idx]).strip()
-                        match_found = False
+                        cell_value = str(
+                            filtered_df.iloc[row_idx, col_idx]
+                        ).strip()
 
                         if ":" in cell_value:
                             parts = cell_value.split(":", 1)
+
                             if len(parts) == 2:
                                 cell_field = parts[0].strip().lower()
                                 cell_value_part = parts[1].strip().lower()
-                                if cell_field == field_lower and cell_value_part == value_lower:
+
+                                if (
+                                    cell_field == field_lower
+                                    and cell_value_part == value_lower
+                                ):
                                     match_found = True
                                     break
 
                     if match_found:
                         matching_rows.append(index_val)
-                        break
 
-                if matching_rows:
-                    filtered_row_indices = filtered_row_indices & set(matching_rows)
-                    
+                filtered_row_indices.intersection_update(matching_rows)
+
+            elif f.get("type") == "exclude_filter":
+                field = f.get("field")
+                value = f.get("value")
+
+                if not field or not value:
+                    continue
+
+                field_lower = str(field).strip().lower()
+                value_lower = str(value).strip().lower()
+                excluded_rows = set()
+
+                for row_idx in range(matrix_start_row, filtered_df.shape[0]):
+                    index_val = filtered_df.index[row_idx]
+
+                    if index_val not in filtered_row_indices:
+                        continue
+
+                    for col_idx in range(matrix_start_col):
+                        cell_value = str(
+                            filtered_df.iloc[row_idx, col_idx]
+                        ).strip()
+
+                        if ":" not in cell_value:
+                            continue
+
+                        cell_field, cell_value_part = cell_value.split(":", 1)
+
+                        if (
+                            cell_field.strip().lower() == field_lower
+                            and cell_value_part.strip().lower() == value_lower
+                        ):
+                            excluded_rows.add(index_val)
+                            break
+
+                filtered_row_indices.difference_update(excluded_rows)
+
+
+            elif f.get("type") == "multi_exclude":
+                # Exclude rows matching ANY of the specified criteria.
+                criteria = f.get("criteria", [])
+
+                if not criteria:
+                    continue
+
+                excluded_rows = set()
+
+                for criterion in criteria:
+                    field = criterion.get("field")
+                    value = criterion.get("value")
+
+                    if field is None or value is None:
+                        continue
+
+                    field_lower = str(field).strip().lower()
+                    value_lower = str(value).strip().lower()
+
+                    for row_idx in range(
+                        matrix_start_row,
+                        filtered_df.shape[0]
+                    ):
+                        index_val = filtered_df.index[row_idx]
+
+                        if index_val not in filtered_row_indices:
+                            continue
+
+                        for col_idx in range(matrix_start_col):
+                            cell_value = str(
+                                filtered_df.iloc[row_idx, col_idx]
+                            ).strip()
+
+                            if ":" not in cell_value:
+                                continue
+
+                            cell_field, cell_value_part = (
+                                cell_value.split(":", 1)
+                            )
+
+                            if (
+                                cell_field.strip().lower() == field_lower
+                                and cell_value_part.strip().lower() == value_lower
+                            ):
+                                excluded_rows.add(index_val)
+                                break
+
+                # OR semantics: remove rows matching ANY criterion.
+                filtered_row_indices.difference_update(excluded_rows)
+
         # Apply final filtered rows
-        if filtered_row_indices:
-            data_matrix = data_matrix.loc[list(filtered_row_indices)]
-            metadata_cols = metadata_cols.loc[list(filtered_row_indices)]
+        if not filtered_row_indices:
+            logger.warning("Row filtering produced zero matching rows")
+            return pd.DataFrame()
+
+        selected_rows = [
+            idx for idx in data_matrix.index
+            if idx in filtered_row_indices
+        ]
+
+        data_matrix = data_matrix.loc[selected_rows]
+        metadata_cols = metadata_cols.loc[selected_rows]
 
         # Apply Column Filters (Sample Metadata)
         for f in filters.get("col", []):
@@ -4491,11 +4827,24 @@ def apply_filters(df, filters,session_id=None):
                     if match_found:
                         matching_cols.append(col_idx)
 
-                if matching_cols:
-                    valid_sample_labels = [filtered_df.columns[col_idx] for col_idx in matching_cols]
-                    common_cols = list(set(data_matrix.columns) & set(valid_sample_labels))
-                    if common_cols:
-                        data_matrix = data_matrix.loc[:, common_cols]
+                if not matching_cols:
+                    logger.warning("Column filtering produced zero matches")
+                    return pd.DataFrame()
+
+                valid_sample_labels = {
+                    filtered_df.columns[col_idx]
+                    for col_idx in matching_cols
+                }
+
+                common_cols = [
+                    col for col in data_matrix.columns
+                    if col in valid_sample_labels
+                ]
+
+                if not common_cols:
+                    return pd.DataFrame()
+
+                data_matrix = data_matrix.loc[:, common_cols]
 
             elif f.get("type") == "exclude_filter":
                 field = f.get("field")
@@ -4543,10 +4892,21 @@ def apply_filters(df, filters,session_id=None):
                         cols_to_exclude.append(col_idx)
 
                 if cols_to_exclude:
-                    exclude_labels = [filtered_df.columns[col_idx] for col_idx in cols_to_exclude]
-                    remaining_cols = [col for col in data_matrix.columns if col not in exclude_labels]
-                    if remaining_cols:
-                        data_matrix = data_matrix.loc[:, remaining_cols]
+                    exclude_labels = [
+                        filtered_df.columns[col_idx]
+                        for col_idx in cols_to_exclude
+                    ]
+
+                    remaining_cols = [
+                        col for col in data_matrix.columns
+                        if col not in exclude_labels
+                    ]
+
+                    if not remaining_cols:
+                        logger.warning("Exclusion removed all columns")
+                        return pd.DataFrame()
+
+                    data_matrix = data_matrix.loc[:, remaining_cols]
 
             elif f.get("type") == "multi_exclude":
                 criteria = f.get("criteria", [])
@@ -4663,15 +5023,15 @@ def apply_filters(df, filters,session_id=None):
                             if col not in labels_to_exclude
                         ]
 
-                        if remaining_cols:
-                            data_matrix = data_matrix.loc[
-                                :,
-                                remaining_cols
-                            ]
+                        if not remaining_cols:
+                            logger.warning("Multi-exclusion removed all columns")
+                            return pd.DataFrame()
+
+                        data_matrix = data_matrix.loc[:, remaining_cols]
         
         if data_matrix.empty:
             logger.warning("No data remains after applying all filters")
-            return df
+            return pd.DataFrame()
 
         if len(metadata_cols) != len(data_matrix):
             metadata_cols = metadata_cols.loc[data_matrix.index]
@@ -4839,7 +5199,7 @@ def update_filters(filters: dict, action: str, target: str, value: str) -> dict:
     return updated_filters
 
 
-def update_filters_multi(filters: dict, action: str, filter_list: list = None, target: str = None, value: str = None) -> dict:
+def update_filters_multi(filters: dict, action: str, filter_list: list = None, target: str = None, value: str = None, metadata: dict = None) -> dict:
     """
     Update filters for multi_filter, exclude_filter, multi_exclude, and clear_filters actions.
 
@@ -4859,50 +5219,79 @@ def update_filters_multi(filters: dict, action: str, filter_list: list = None, t
         # Clear all filters - reset to empty
         return {"row": [], "col": []}
 
+
     elif action == "multi_filter":
-        # Add multiple sample filters (AND logic)
+        # Add multiple metadata filters using AND logic.
         if filter_list:
+            metadata_dict = metadata if isinstance(metadata, dict) else {}
+
+            row_fields = metadata_dict.get("row", {})
+            col_fields = metadata_dict.get("col", {})
+
             for filter_obj in filter_list:
                 filter_target = filter_obj.get("target")
                 filter_value = filter_obj.get("value")
 
-                if filter_target and filter_value:
-                    # Check if filter for this field already exists
-                    field_filter_exists = False
-                    for i, existing_filter in enumerate(updated_filters.get("col", [])):
-                        if existing_filter.get("type") == "sample_filter" and existing_filter.get("field") == filter_target:
-                            # Replace existing filter for this field
-                            updated_filters["col"][i] = {
-                                "type": "sample_filter",
-                                "field": filter_target,
-                                "value": filter_value
-                            }
-                            field_filter_exists = True
-                            break
+                if not filter_target or filter_value is None:
+                    continue
 
-                    # If no filter for this field exists, add new one
-                    if not field_filter_exists:
-                        updated_filters.setdefault("col", []).append({
-                            "type": "sample_filter",
-                            "field": filter_target,
-                            "value": filter_value
-                        })
+                in_rows = filter_target in row_fields
+                in_cols = filter_target in col_fields
+
+                # Determine the physical metadata axis.
+                axis_key = (
+                    "row" if in_rows and not in_cols else "col"
+                )
+
+                # apply_filters uses gene_filter for row metadata
+                # and sample_filter for column metadata.
+                filter_type = (
+                    "gene_filter" if axis_key == "row"
+                    else "sample_filter"
+                )
+
+                # Replace an existing inclusion filter for this field
+                # regardless of its previous physical axis.
+                for existing_axis in ("row", "col"):
+                    updated_filters[existing_axis] = [
+                        item
+                        for item in updated_filters.get(existing_axis, [])
+                        if not (
+                            item.get("type") in (
+                                "gene_filter",
+                                "sample_filter"
+                            )
+                            and item.get("field") == filter_target
+                        )
+                    ]
+
+                updated_filters.setdefault(axis_key, []).append({
+                    "type": filter_type,
+                    "field": filter_target,
+                    "value": filter_value
+                })
+
 
     elif action == "exclude_filter":
-        # Add a single exclude filter
         if target and value:
-            # Check if exclude filter for this field already exists
+            metadata_dict = metadata if isinstance(metadata, dict) else {}
+
+            in_rows = target in metadata_dict.get("row", {})
+            in_cols = target in metadata_dict.get("col", {})
+
+            # Preserve legacy column behavior when orientation is unknown.
+            axis_key = "row" if in_rows and not in_cols else "col"
+
             field_filter_exists = False
 
             for i, existing_filter in enumerate(
-                updated_filters.get("col", [])
+                updated_filters.get(axis_key, [])
             ):
                 if (
                     existing_filter.get("type") == "exclude_filter"
                     and existing_filter.get("field") == target
                 ):
-                    # Replace existing exclude filter for this field
-                    updated_filters["col"][i] = {
+                    updated_filters[axis_key][i] = {
                         "type": "exclude_filter",
                         "field": target,
                         "value": value
@@ -4910,32 +5299,50 @@ def update_filters_multi(filters: dict, action: str, filter_list: list = None, t
                     field_filter_exists = True
                     break
 
-            # If no exclude filter for this field exists, add new one
             if not field_filter_exists:
-                updated_filters.setdefault("col", []).append({
+                updated_filters.setdefault(axis_key, []).append({
                     "type": "exclude_filter",
                     "field": target,
                     "value": value
                 })
 
+
+
     elif action == "multi_exclude":
-        # Store one compound exclusion so the criteria are evaluated
-        # with OR semantics: exclude samples matching any criterion.
+        # Store one compound exclusion using OR logic.
         criteria = []
+        criteria_axes = []
+
+        metadata_dict = metadata if isinstance(metadata, dict) else {}
+
+        row_fields = metadata_dict.get("row", {})
+        col_fields = metadata_dict.get("col", {})
 
         if filter_list:
             for filter_obj in filter_list:
                 filter_target = filter_obj.get("target")
                 filter_value = filter_obj.get("value")
 
-                if filter_target and filter_value:
+                if filter_target and filter_value is not None:
+
+                    in_rows = filter_target in row_fields
+                    in_cols = filter_target in col_fields
+
+                    axis_key = (
+                        "row" if in_rows and not in_cols else "col"
+                    )
+
+                    criteria_axes.append(axis_key)
+
                     criteria.append({
                         "field": filter_target,
                         "value": filter_value
                     })
 
-        if criteria:
-            updated_filters.setdefault("col", []).append({
+        if criteria and len(set(criteria_axes)) == 1:
+            axis_key = criteria_axes[0]
+
+            updated_filters.setdefault(axis_key, []).append({
                 "type": "multi_exclude",
                 "criteria": criteria
             })
